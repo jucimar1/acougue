@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Ofertas - Rústico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com');
+        
+        body { 
+            font-family: 'Inter', sans-serif;
+            /* Fundo de madeira rústica */
+            background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+                              url('https://images.unsplash.com');
+            background-size: cover;
+            background-attachment: fixed;
+            background-position: center;
+        }
+
+        h2 { font-family: 'Oswald', sans-serif; }
+        
+        .no-display { display: none !important; }
+        
+        /* Efeito de brilho nas ofertas */
+        .promo-card { 
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            border: 2px solid #f97316;
+            transition: transform 0.3s ease;
+        }
+
+        #app-container:-webkit-full-screen { 
+            width: 100%; height: 100%; 
+            padding: 50px;
+            display: flex; flex-direction: column;
+        }
+    </style>
+</head>
+<body class="text-white min-h-screen">
+
+    <!-- GERENCIADOR -->
+    <div id="admin-panel" class="p-6 bg-black/80 border-b border-orange-900/50 shadow-2xl backdrop-blur-md">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+                <h1 class="text-2xl font-black text-orange-500 uppercase tracking-widest">Painel Rústico de Ofertas</h1>
+                
+                <div class="flex items-center gap-4">
+                    <label class="bg-orange-900 hover:bg-orange-800 px-4 py-2 rounded-lg cursor-pointer font-bold text-sm transition border border-orange-500/30">
+                        📁 CARREGAR LOGO
+                        <input type="file" id="logoInput" accept="image/*" class="hidden" onchange="uploadLogo(this)">
+                    </label>
+                    <button onclick="toggleFullscreen()" class="bg-orange-600 hover:bg-orange-500 px-6 py-2 rounded-full font-bold shadow-lg transition">
+                        📺 MODO TV (TELA CHEIA)
+                    </button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white/10 p-4 rounded-xl">
+                <input id="prodNome" type="text" placeholder="Produto (ex: Costelinha)" class="bg-gray-900 p-3 rounded-lg border border-orange-900 outline-none focus:border-orange-500 text-white">
+                <input id="prodPreco" type="text" placeholder="Preço (ex: 22,90)" class="bg-gray-900 p-3 rounded-lg border border-orange-900 outline-none focus:border-orange-500 text-white">
+                <input id="prodUnidade" type="text" placeholder="Unid (ex: kg)" class="bg-gray-900 p-3 rounded-lg border border-orange-900 outline-none focus:border-orange-500 text-white">
+                <button onclick="adicionarOferta()" class="bg-orange-600 hover:bg-orange-700 font-black py-3 rounded-lg uppercase tracking-tighter">Inserir no Painel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAINEL DE EXIBIÇÃO -->
+    <div id="app-container" class="max-w-7xl mx-auto p-8">
+        <header class="flex justify-between items-center mb-12 border-b-2 border-orange-500/50 pb-8">
+            <div class="flex items-center gap-8">
+                <div id="logo-container">
+                    <img id="logo-img" src="" alt="Logo" class="max-h-24 max-w-[200px] object-contain hidden drop-shadow-lg">
+                    <div id="logo-placeholder" class="bg-orange-600 w-20 h-20 rounded-2xl flex items-center justify-center font-black text-4xl shadow-xl shadow-orange-900/50">🥩</div>
+                </div>
+                <div>
+                    <h2 class="text-7xl font-black uppercase italic tracking-tighter text-orange-500 drop-shadow-md">ESPECIAL <span class="text-white">SUÍNOS</span></h2>
+                    <p class="text-2xl text-gray-300 font-bold uppercase tracking-[0.3em]">Cortes Selecionados</p>
+                </div>
+            </div>
+            <div class="text-right hidden md:block">
+                <p id="data-atual" class="text-4xl font-black text-white"></p>
+                <p class="text-orange-500 font-black uppercase tracking-widest">Ofertas Válidas Hoje</p>
+            </div>
+        </header>
+
+        <div id="grid-ofertas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10"></div>
+    </div>
+
+    <script>
+        let ofertas = JSON.parse(localStorage.getItem('ofertas_suino')) || [
+            { nome: 'Costelinha Suína', preco: '28,90', unidade: 'kg' },
+            { nome: 'Panceta Especial', preco: '24,50', unidade: 'kg' }
+        ];
+        
+        window.onload = () => {
+            const savedLogo = localStorage.getItem('loja_logo');
+            if(savedLogo) displayLogo(savedLogo);
+            renderizar();
+        };
+
+        function uploadLogo(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    localStorage.setItem('loja_logo', e.target.result);
+                    displayLogo(e.target.result);
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function displayLogo(src) {
+            const img = document.getElementById('logo-img');
+            const placeholder = document.getElementById('logo-placeholder');
+            img.src = src;
+            img.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+                document.getElementById('admin-panel').classList.add('no-display');
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) document.getElementById('admin-panel').classList.remove('no-display');
+        });
+
+        function adicionarOferta() {
+            const nome = document.getElementById('prodNome').value;
+            const preco = document.getElementById('prodPreco').value;
+            const unidade = document.getElementById('prodUnidade').value || 'kg';
+
+            if(nome && preco) {
+                ofertas.push({ nome, preco, unidade });
+                localStorage.setItem('ofertas_suino', JSON.stringify(ofertas));
+                renderizar();
+                document.getElementById('prodNome').value = '';
+                document.getElementById('prodPreco').value = '';
+            }
+        }
+
+        function remover(index) {
+            ofertas.splice(index, 1);
+            localStorage.setItem('ofertas_suino', JSON.stringify(ofertas));
+            renderizar();
+        }
+
+        function renderizar() {
+            const grid = document.getElementById('grid-ofertas');
+            grid.innerHTML = ofertas.map((item, i) => `
+                <div class="promo-card text-gray-900 rounded-[2rem] shadow-2xl overflow-hidden relative group">
+                    <div class="p-8">
+                        <h3 class="text-3xl font-black uppercase mb-4 h-20 overflow-hidden border-b border-gray-200">${item.nome}</h3>
+                        <div class="flex items-start gap-1">
+                            <span class="text-2xl font-black text-orange-600 mt-2">R$</span>
+                            <span class="text-8xl font-black tracking-tighter leading-none">${item.preco}</span>
+                            <span class="text-2xl font-bold text-gray-400 self-end mb-2">/${item.unidade}</span>
+                        </div>
+                    </div>
+                    <div class="bg-orange-600 py-4 px-6 flex justify-between items-center text-white">
+                        <span class="font-black italic text-xl tracking-widest uppercase">PREÇO BAIXO</span>
+                        <button onclick="remover(${i})" class="no-display bg-black/20 hover:bg-black/40 w-8 h-8 rounded-full text-[10px]">✕</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('data-atual').innerText = new Date().toLocaleDateString('pt-BR');
+    </script>
+</body>
+</html>
