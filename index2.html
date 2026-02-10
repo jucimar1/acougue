@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Ofertas - Repositório</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com');
+        
+        body { 
+            font-family: 'Inter', sans-serif;
+            /* Fundo padrão vindo do repositório */
+            background-image: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('fundo.jpg');
+            background-size: cover;
+            background-attachment: fixed;
+            transition: background-image 0.5s ease-in-out;
+        }
+
+        .promo-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 6px solid #ea580c;
+            transform: skewX(-1deg);
+        }
+
+        #app-container:fullscreen {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body class="text-white min-h-screen">
+
+    <!-- GESTOR -->
+    <div id="admin-panel" class="p-6 bg-black/90 border-b border-orange-500 shadow-2xl">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-xl font-bold text-orange-500">Configurações do Painel</h1>
+                <button onclick="toggleFullscreen()" class="bg-orange-600 px-4 py-2 rounded-lg font-bold">TELA CHEIA</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-white/5 rounded-xl">
+                <!-- Config de Imagens -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-gray-400">IMAGEM DE FUNDO (Caminho ou URL)</label>
+                    <input id="bgUrl" type="text" placeholder="ex: fundo-madeira.jpg" 
+                           class="w-full bg-gray-800 p-2 rounded border border-gray-700 text-sm">
+                    <button onclick="atualizarFundo()" class="w-full bg-gray-700 text-xs py-2 rounded">Aplicar Fundo</button>
+                </div>
+                
+                <!-- Cadastro de Produtos -->
+                <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <input id="prodNome" type="text" placeholder="Produto" class="md:col-span-2 bg-gray-800 p-2 rounded border border-gray-700">
+                    <input id="prodPreco" type="text" placeholder="Preço" class="bg-gray-800 p-2 rounded border border-gray-700">
+                    <button id="btnSalvar" onclick="salvarOferta()" class="bg-orange-600 font-bold rounded">Salvar</button>
+                </div>
+            </div>
+
+            <!-- Lista de Edição -->
+            <div id="lista-gestao" class="flex flex-wrap gap-2"></div>
+        </div>
+    </div>
+
+    <!-- EXIBIÇÃO -->
+    <div id="app-container" class="max-w-[1400px] mx-auto p-8">
+        <header class="flex justify-between items-center mb-10 bg-black/30 p-6 rounded-3xl backdrop-blur-sm border border-white/10">
+            <div class="flex items-center gap-8">
+                <!-- Logo vindo do Repositório -->
+                <img id="logo-img" src="logo.png" onerror="this.src='https://placehold.co'" 
+                     class="max-h-28 w-auto object-contain drop-shadow-2xl bg-white p-2 rounded-lg">
+                <div>
+                    <h2 class="text-7xl font-black italic tracking-tighter text-orange-500 uppercase">Ofertas <span class="text-white">Arrasadoras</span></h2>
+                </div>
+            </div>
+            <div class="text-right">
+                <p id="data-atual" class="text-5xl font-black"></p>
+                <p class="text-orange-500 font-bold tracking-widest">SÓ HOJE</p>
+            </div>
+        </header>
+
+        <div id="grid-ofertas" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
+            <!-- Cards -->
+        </div>
+    </div>
+
+    <script>
+        let ofertas = JSON.parse(localStorage.getItem('ofertas_v3')) || [];
+        let editIndex = -1;
+
+        // Inicialização
+        window.onload = () => {
+            const savedBg = localStorage.getItem('background_url');
+            if(savedBg) {
+                document.body.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('${savedBg}')`;
+                document.getElementById('bgUrl').value = savedBg;
+            }
+            renderizar();
+        };
+
+        function atualizarFundo() {
+            const url = document.getElementById('bgUrl').value;
+            localStorage.setItem('background_url', url);
+            document.body.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('${url}')`;
+        }
+
+        function salvarOferta() {
+            const nome = document.getElementById('prodNome').value;
+            const preco = document.getElementById('prodPreco').value;
+            
+            if(!nome || !preco) return;
+
+            if(editIndex > -1) {
+                ofertas[editIndex] = { nome, preco };
+                editIndex = -1;
+                document.getElementById('btnSalvar').innerText = "Salvar";
+            } else {
+                ofertas.push({ nome, preco });
+            }
+
+            localStorage.setItem('ofertas_v3', JSON.stringify(ofertas));
+            document.getElementById('prodNome').value = '';
+            document.getElementById('prodPreco').value = '';
+            renderizar();
+        }
+
+        function prepararEdicao(index) {
+            editIndex = index;
+            document.getElementById('prodNome').value = ofertas[index].nome;
+            document.getElementById('prodPreco').value = ofertas[index].preco;
+            document.getElementById('btnSalvar').innerText = "Atualizar";
+        }
+
+        function remover(index) {
+            ofertas.splice(index, 1);
+            localStorage.setItem('ofertas_v3', JSON.stringify(ofertas));
+            renderizar();
+        }
+
+        function renderizar() {
+            // Cards Exibição
+            document.getElementById('grid-ofertas').innerHTML = ofertas.map(item => `
+                <div class="promo-card p-6 rounded-xl flex flex-col items-center text-center shadow-2xl">
+                    <h3 class="text-gray-800 text-2xl font-black uppercase mb-4 h-16 overflow-hidden">${item.nome}</h3>
+                    <div class="flex items-start text-orange-600">
+                        <span class="text-2xl font-bold mt-2">R$</span>
+                        <span class="text-8xl font-black tracking-tighter">${item.preco}</span>
+                    </div>
+                    <div class="w-full bg-orange-600 text-white mt-4 py-2 font-bold rounded-lg italic">PREÇO BAIXO</div>
+                </div>
+            `).join('');
+
+            // Lista Gestão
+            document.getElementById('lista-gestao').innerHTML = ofertas.map((item, i) => `
+                <div class="bg-white/10 p-2 rounded text-xs flex gap-3 items-center border border-white/5">
+                    <span>${item.nome}</span>
+                    <button onclick="prepararEdicao(${i})" class="text-blue-400">Editar</button>
+                    <button onclick="remover(${i})" class="text-red-400">X</button>
+                </div>
+            `).join('');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+                document.getElementById('admin-panel').classList.add('hidden');
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) document.getElementById('admin-panel').classList.remove('hidden');
+        });
+
+        document.getElementById('data-atual').innerText = new Date().toLocaleDateString('pt-BR');
+    </script>
+</body>
+</html>
