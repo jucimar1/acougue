@@ -9,15 +9,94 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #0d1117; color: white; }
         .preco-valor { font-family: 'Oswald', sans-serif; }
-        #monitor { background: #000; display: none; z-index: 9999; }
+        #monitor { background: #000; display: none; z-index: 9999; position: relative; }
         .log-error { color: #ff4444; font-size: 10px; margin-top: 5px; }
         .log-success { color: #44ff44; font-size: 10px; margin-top: 5px; }
-        /* Ajuste responsivo dos cards */
-        @media (max-width: 768px) {
-            .card { width: 100%; max-width: 300px; }
+        /* Estilo para o fundo */
+        #monitor {
+            background-image: url('images/fundo.jpg'); /* Substitua pelo caminho da sua imagem */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
         }
-        @media (min-width: 768px) {
-            .card { width: 25%; max-width: 300px; }
+        /* Estilo para o card */
+        .card { 
+            width: 100%; 
+            max-width: 300px; 
+            height: 200px; 
+            border-radius: 1rem; 
+            overflow: hidden; 
+            transition: transform 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .card:hover { transform: scale(1.05); }
+        .card h3 { 
+            font-size: 1.2rem; 
+            font-weight: bold; 
+            text-align: center; 
+            margin: 1rem 0;
+        }
+        .card .preco { 
+            font-size: 2.5rem; 
+            font-weight: bold; 
+            text-align: center; 
+            color: #e53838; 
+            margin: 1rem 0;
+        }
+        .card .preco span { 
+            font-size: 1rem; 
+            color: #e53838; 
+            margin-right: 0.5rem;
+        }
+        /* Estilo para o logo */
+        #mon-logo { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            width: 120px; 
+            height: auto; 
+            border-radius: 1rem; 
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        /* Estilo para o título */
+        #mon-titulo-tipo { 
+            font-size: 3rem; 
+            font-weight: bold; 
+            color: #e53838; 
+            margin-bottom: 1rem;
+        }
+        /* Estilo para a data */
+        #mon-data { 
+            font-size: 2rem; 
+            font-weight: bold; 
+            color: white; 
+            margin-bottom: 1rem;
+        }
+        /* Estilo para o vídeo */
+        #monitor-video { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            z-index: 10000; 
+            display: none;
+        }
+        /* Estilo para o grid de cards */
+        #mon-grid { 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 1rem; 
+            padding: 1rem; 
+            justify-content: center;
+        }
+        /* Responsividade */
+        @media (max-width: 768px) {
+            #mon-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 480px) {
+            #mon-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -94,6 +173,15 @@
                         <button onclick="testarMidia('fundo')" class="bg-gray-700 px-2 rounded text-[10px]">VER</button>
                     </div>
                 </div>
+                <div>
+                    <label class="text-[10px] text-gray-400 uppercase">Logo do Supermercado (Ex: logo.png)</label>
+                    <div class="flex gap-2">
+                        <input id="logoInput" type="text" value="logo.png" class="flex-grow bg-black border border-gray-700 p-2 rounded text-xs">
+                        <button onclick="abrirSelecaoLogo()" class="bg-gray-700 px-2 rounded text-[10px]">PROCURAR</button>
+                        <button onclick="salvarLogoNoGitHub()" class="bg-green-600 px-2 rounded text-[10px]">SALVAR NO GITHUB</button>
+                        <button onclick="testarMidia('logo')" class="bg-gray-700 px-2 rounded text-[10px]">VER</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -114,6 +202,8 @@
         let ofertasAtuais = [];
         const TEMPO_EXIBICAO = 15000;
         let editando = null;
+        let indiceAtual = 0; // Índice atual dos cortes
+        let totalCortes = 0; // Total de cortes
 
         // SALVAMENTO SEGURO DE CONFIGURAÇÕES
         document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('gh_token', e.target.value));
@@ -276,6 +366,22 @@
                     };
                     fileInput.click();
                 }
+            } else if(tipo === 'logo') {
+                if (val.startsWith('http')) {
+                    document.getElementById('mon-logo').src = val;
+                } else {
+                    const fileInput = document.createElement('input');
+                    fileInput.type = 'file';
+                    fileInput.accept = 'image/*';
+                    fileInput.onchange = function(e) {
+                        const file = e.target.files[0];
+                        if (file) {
+                            const url = URL.createObjectURL(file);
+                            document.getElementById('mon-logo').src = url;
+                        }
+                    };
+                    fileInput.click();
+                }
             } else {
                 alert("A logo será testada ao iniciar o monitor.");
             }
@@ -321,6 +427,28 @@
                 console.log("Imagem de fundo selecionada:", filePath);
 
                 testarMidia('fundo');
+            };
+            input.click();
+        }
+
+        function abrirSelecaoLogo() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (!file.type.startsWith('image/')) {
+                    alert("Por favor, selecione um arquivo de imagem.");
+                    return;
+                }
+
+                const filePath = file.name;
+                document.getElementById('logoInput').value = filePath;
+                console.log("Logo selecionado:", filePath);
+
+                testarMidia('logo');
             };
             input.click();
         }
@@ -405,6 +533,46 @@
             input.click();
         }
 
+        async function salvarLogoNoGitHub() {
+            const logoPath = document.getElementById('logoInput').value;
+            const token = document.getElementById('ghToken').value;
+            const repo = document.getElementById('ghRepo').value;
+
+            if (!token || !repo) {
+                alert("Preencha Token e Repositório!");
+                return;
+            }
+
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async function() {
+                    const base64 = reader.result.split(',')[1];
+                    
+                    try {
+                        const res = await ghFetch(logoPath, 'PUT', {
+                            message: "Atualização de logo",
+                            content: base64,
+                            sha: null
+                        });
+
+                        if (res) {
+                            alert("Logo salvo com sucesso no GitHub!");
+                        }
+                    } catch (err) {
+                        alert("Erro ao salvar no GitHub: " + err.message);
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+
         function iniciarMonitor() {
             if(ofertasAtuais.length === 0) return alert("Adicione preços antes de iniciar!");
             document.getElementById('monitor').style.display = 'flex';
@@ -418,20 +586,43 @@
             const tipo = document.getElementById('filtroTipo').value;
             document.getElementById('mon-titulo-tipo').innerText = tipo;
             
-            document.getElementById('mon-grid').innerHTML = ofertasAtuais.slice(0, 8).map(item => `
-                <div class="bg-white p-6 rounded-3xl shadow-2xl text-center border-b-[15px] border-orange-600 animate-pulse">
-                    <h3 class="text-slate-900 text-4xl font-black uppercase h-24 flex items-center justify-center leading-none">${item.nome}</h3>
-                    <div class="my-6">
-                        <span class="text-orange-600 text-2xl font-bold">R$</span>
-                        <span class="preco-valor text-9xl font-black text-slate-900 tracking-tighter">${item.preco}</span>
+            // Calcula o número de cortes a serem mostrados (4 por vez)
+            const inicio = indiceAtual * 4;
+            const fim = Math.min(inicio + 4, ofertasAtuais.length);
+            totalCortes = ofertasAtuais.length;
+            
+            // Verifica se há mais cortes para mostrar
+            if (inicio >= totalCortes) {
+                // Se não houver mais cortes, mostra o vídeo
+                mostrarVideo();
+                return;
+            }
+            
+            // Atualiza o índice para o próximo grupo de 4 cortes
+            indiceAtual++;
+            
+            // Limpa o grid
+            document.getElementById('mon-grid').innerHTML = "";
+            
+            // Adiciona os cortes do grupo atual
+            for (let i = inicio; i < fim; i++) {
+                const item = ofertasAtuais[i];
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <h3>${item.nome}</h3>
+                    <div class="preco">
+                        <span>R$</span>
+                        <span class="preco-valor">${item.preco}</span>
                     </div>
-                </div>
-            `).join('');
-
-            setTimeout(iniciarVideo, TEMPO_EXIBICAO);
+                `;
+                document.getElementById('mon-grid').appendChild(card);
+            }
+            
+            setTimeout(cicloMonitor, TEMPO_EXIBICAO);
         }
 
-        function iniciarVideo() {
+        function mostrarVideo() {
             const v = document.getElementById('monitor-video');
             const m = document.getElementById('monitor');
             
@@ -458,6 +649,8 @@
             v.onended = () => {
                 v.classList.add('hidden');
                 m.classList.remove('hidden');
+                // Reinicia o ciclo de cortes
+                indiceAtual = 0;
                 cicloMonitor();
             };
         }
