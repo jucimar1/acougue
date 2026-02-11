@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Açougue Pro - GitHub Sync</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com');
+        body { font-family: 'Inter', sans-serif; background-color: #000; overflow: hidden; }
+        .preco-valor { font-family: 'Oswald', sans-serif; }
+        .fade-in { animation: fadeIn 0.6s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body class="text-white min-h-screen">
+
+    <video id="video-player" class="fixed inset-0 w-full h-full object-cover z-50 hidden" muted playsinline></video>
+
+    <!-- PAINEL DE GESTÃO -->
+    <div id="admin-panel" class="relative z-10 p-4 bg-slate-900 border-b-2 border-orange-600 shadow-2xl space-y-4">
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            <!-- Configurações de API -->
+            <div class="md:col-span-5 flex gap-2 border-b border-slate-700 pb-2 mb-2">
+                <input id="ghToken" type="password" placeholder="GitHub Token" class="bg-slate-800 p-1 text-xs rounded w-64 border border-slate-700">
+                <input id="ghUserRepo" type="text" placeholder="usuario/repositorio" class="bg-slate-800 p-1 text-xs rounded w-48 border border-slate-700">
+                <button onclick="carregarDadosGitHub()" class="bg-blue-600 px-3 py-1 rounded text-xs font-bold uppercase">Sincronizar GitHub</button>
+            </div>
+
+            <!-- Cadastro de Produto -->
+            <div class="md:col-span-2">
+                <label class="block text-[10px] font-bold text-orange-500 uppercase">Corte de Carne</label>
+                <input id="prodNome" type="text" class="w-full bg-slate-800 p-2 rounded border border-slate-700">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-orange-500 uppercase">Preço</label>
+                <input id="prodPreco" type="text" class="w-full bg-slate-800 p-2 rounded border border-slate-700">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-orange-500 uppercase">Tipo</label>
+                <select id="prodTipo" class="w-full bg-slate-800 p-2 rounded border border-slate-700 text-sm">
+                    <option value="bovino">Bovino (bovino.json)</option>
+                    <option value="suino">Suíno (suino.json)</option>
+                </select>
+            </div>
+            <button onclick="salvarOferta()" class="bg-orange-600 hover:bg-orange-700 p-2 rounded font-bold uppercase h-10">Salvar</button>
+        </div>
+
+        <div class="max-w-7xl mx-auto flex gap-4">
+            <div class="flex-1">
+                <label class="block text-[10px] font-bold text-blue-400 uppercase">Vídeo Promocional (ex: video1.mp4)</label>
+                <input id="videoUrl" type="text" value="video.mp4" class="w-full bg-slate-800 p-2 rounded border border-slate-700 text-sm">
+            </div>
+            <div class="flex items-end gap-2">
+                <button onclick="toggleFullscreen()" class="bg-slate-700 px-4 py-2 rounded font-bold text-xs uppercase">Tela Cheia</button>
+            </div>
+        </div>
+        
+        <div id="lista-gestao" class="max-w-7xl mx-auto flex flex-wrap gap-2 pt-2 border-t border-slate-800"></div>
+    </div>
+
+    <!-- EXIBIÇÃO -->
+    <main id="app-container" class="max-w-[1600px] mx-auto p-6 h-screen flex flex-col">
+        <header class="flex justify-between items-center mb-10 bg-black/50 p-6 rounded-2xl border border-white/10">
+            <img src="logo.png" class="h-24 bg-white p-2 rounded-lg shadow-xl">
+            <div class="text-right">
+                <h2 class="text-6xl font-black italic text-orange-500">OFERTAS <span class="text-white uppercase" id="tipo-view">AÇOUGUE</span></h2>
+                <p id="data-atual" class="text-3xl font-black"></p>
+            </div>
+        </header>
+        <div id="grid-ofertas" class="grid grid-cols-1 md:grid-cols-4 gap-6"></div>
+    </main>
+
+    <script>
+        let dados = { bovino: [], suino: [] };
+        let currentType = 'bovino';
+        const TEMPO_TRANSICAO = 15000;
+
+        // --- INTEGRAÇÃO GITHUB ---
+        async function githubSync(filename, content) {
+            const token = document.getElementById('ghToken').value;
+            const repo = document.getElementById('ghUserRepo').value;
+            if(!token || !repo) return alert("Configure Token e Repositório!");
+
+            const url = `https://api.github.com{repo}/contents/${filename}`;
+            
+            // 1. Pega o SHA atual do arquivo (necessário para atualizar)
+            let sha = "";
+            try {
+                const res = await fetch(url, { headers: { Authorization: `token ${token}` } });
+                const data = await res.json();
+                sha = data.sha;
+            } catch(e) {}
+
+            // 2. Envia a atualização
+            const res = await fetch(url, {
+                method: 'PUT',
+                headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: `Atualizando ${filename}`,
+                    content: btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2)))),
+                    sha: sha
+                })
+            });
+            if(res.ok) console.log(`${filename} salvo no GitHub!`);
+        }
+
+        async function carregarDadosGitHub() {
+            const repo = document.getElementById('ghUserRepo').value;
+            const token = document.getElementById('ghToken').value;
+            ['bovino.json', 'suino.json'].forEach(async (file) => {
+                try {
+                    const res = await fetch(`https://api.github.com{repo}/contents/${file}`, {
+                        headers: { Authorization: `token ${token}` }
+                    });
+                    const data = await res.json();
+                    dados[file.split('.')[0]] = JSON.parse(decodeURIComponent(escape(atob(data.content))));
+                    renderizarGestao();
+                } catch(e) { console.log(`Arquivo ${file} não encontrado.`); }
+            });
+        }
+
+        // --- LÓGICA DO PAINEL ---
+        function salvarOferta() {
+            const tipo = document.getElementById('prodTipo').value;
+            const nova = {
+                nome: document.getElementById('prodNome').value,
+                preco: document.getElementById('prodPreco').value
+            };
+            dados[tipo].push(nova);
+            githubSync(`${tipo}.json`, dados[tipo]);
+            renderizarGestao();
+        }
+
+        function remover(tipo, index) {
+            dados[tipo].splice(index, 1);
+            githubSync(`${tipo}.json`, dados[tipo]);
+            renderizarGestao();
+        }
+
+        function renderizarGestao() {
+            const container = document.getElementById('lista-gestao');
+            container.innerHTML = '';
+            ['bovino', 'suino'].forEach(t => {
+                dados[t].forEach((item, i) => {
+                    container.innerHTML += `
+                        <div class="bg-slate-800 p-1 px-2 rounded text-[10px] border border-slate-700">
+                            <span class="${t == 'bovino' ? 'text-red-400' : 'text-green-400'} uppercase">${t}:</span> ${item.nome} 
+                            <button onclick="remover('${t}', ${i})" class="text-red-500 ml-2 font-bold underline">X</button>
+                        </div>`;
+                });
+            });
+        }
+
+        // --- ROTAÇÃO DE TELA ---
+        let rotationIdx = 0;
+        function iniciarPainel() {
+            const tipos = ['bovino', 'suino'];
+            const container = document.getElementById('grid-ofertas');
+            const typeDisplay = document.getElementById('tipo-view');
+            
+            const tipoAtual = tipos[rotationIdx % 2];
+            typeDisplay.innerText = tipoAtual;
+            
+            container.innerHTML = dados[tipoAtual].slice(0, 4).map(item => `
+                <div class="fade-in bg-white p-6 rounded-3xl shadow-2xl border-b-[12px] border-orange-600 text-center">
+                    <h3 class="text-slate-900 text-3xl font-black uppercase h-20">${item.nome}</h3>
+                    <div class="my-4"><span class="text-orange-600 font-bold">R$</span> <span class="preco-valor text-8xl font-black text-slate-900">${item.preco}</span></div>
+                    <div class="bg-orange-600 text-white py-2 rounded font-black italic uppercase">Qualidade ${tipoAtual}</div>
+                </div>
+            `).join('');
+
+            setTimeout(() => {
+                rotationIdx++;
+                if(rotationIdx % 2 === 0) rodarVideo();
+                else iniciarPainel();
+            }, TEMPO_TRANSICAO);
+        }
+
+        function rodarVideo() {
+            const v = document.getElementById('video-player');
+            v.src = document.getElementById('videoUrl').value;
+            v.classList.remove('hidden');
+            v.play();
+            v.onended = () => { v.classList.add('hidden'); iniciarPainel(); };
+        }
+
+        function toggleFullscreen() {
+            document.documentElement.requestFullscreen();
+            document.getElementById('admin-panel').classList.add('hidden');
+        }
+
+        window.onload = () => {
+            document.getElementById('data-atual').innerText = new Date().toLocaleDateString('pt-BR');
+            iniciarPainel();
+        };
+    </script>
+</body>
+</html>
