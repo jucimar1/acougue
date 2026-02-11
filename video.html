@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Açougue Pro - Filtro Único</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com');
+        body { font-family: 'Inter', sans-serif; background-color: #0d1117; color: white; }
+        .preco-valor { font-family: 'Oswald', sans-serif; }
+        #monitor { background: #000; display: none; z-index: 9999; }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- PLAYER DE VÍDEO (MONITOR) -->
+    <video id="monitor-video" class="fixed inset-0 w-full h-full object-cover hidden z-[100]" muted></video>
+
+    <!-- GESTOR ADM -->
+    <div id="admin-panel" class="p-6 max-w-5xl mx-auto space-y-6">
+        <header class="flex justify-between items-center border-b border-gray-700 pb-4">
+            <h1 class="text-2xl font-black text-orange-500 italic uppercase">Gestão de Açougue</h1>
+            <button onclick="iniciarMonitor()" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-full font-bold uppercase text-xs transition-all">Iniciar Monitor</button>
+        </header>
+
+        <!-- CONFIG GITHUB -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-900 p-4 rounded-xl border border-gray-800">
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase">Token GitHub</label>
+                <input id="ghToken" type="password" class="w-full bg-black border border-gray-700 p-2 rounded text-sm text-orange-400">
+            </div>
+            <div class="space-y-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase">Usuário/Repositório</label>
+                <input id="ghRepo" type="text" placeholder="ex: usuario/acougue" class="w-full bg-black border border-gray-700 p-2 rounded text-sm">
+            </div>
+            <div class="flex items-end">
+                <button onclick="conectarGitHub()" class="w-full bg-gray-700 hover:bg-green-600 p-2 rounded font-bold text-xs transition-all uppercase">Sincronizar</button>
+            </div>
+        </section>
+
+        <!-- CADASTRO E PREVIA -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-orange-500 font-bold text-sm uppercase">Configurar Exibição</h3>
+                    <select id="filtroTipo" onchange="baixarDados()" class="bg-orange-600 text-white font-bold p-1 rounded text-xs uppercase">
+                        <option value="bovino">Focar Bovino</option>
+                        <option value="suino">Focar Suíno</option>
+                    </select>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="prodNome" type="text" placeholder="Nome do Corte" class="col-span-2 bg-black border border-gray-700 p-3 rounded">
+                    <input id="prodPreco" type="text" placeholder="Preço (ex: 45,90)" class="bg-black border border-gray-700 p-3 rounded">
+                    <button onclick="adicionarOferta()" class="bg-orange-600 font-black rounded uppercase text-sm">Salvar</button>
+                </div>
+                
+                <div id="lista-itens" class="space-y-2 max-h-48 overflow-y-auto pt-2"></div>
+            </div>
+
+            <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-4">
+                <h3 class="text-blue-500 font-bold text-sm uppercase">Mídias e Logo</h3>
+                <input id="videoInput" type="text" value="churras.mp4" onchange="atualizarPreview()" class="w-full bg-black border border-gray-700 p-2 rounded text-sm" placeholder="Nome do vídeo no GitHub">
+                <video id="preview-video" class="w-full h-32 bg-black rounded-lg border border-gray-700" muted autoplay loop></video>
+                <input id="logoInput" type="text" value="logo.png" class="w-full bg-black border border-gray-700 p-2 rounded text-sm" placeholder="Nome da logo no GitHub">
+            </div>
+        </div>
+    </div>
+
+    <!-- MONITOR DE EXIBIÇÃO -->
+    <div id="monitor" class="fixed inset-0 flex flex-col p-10">
+        <header class="flex justify-between items-center bg-black/60 p-8 rounded-3xl border border-white/10 backdrop-blur-md">
+            <img id="mon-logo" src="logo.png" class="h-28 bg-white p-2 rounded-xl">
+            <div class="text-right">
+                <h2 class="text-7xl font-black italic text-orange-500 leading-none uppercase">OFERTAS <span id="mon-titulo-tipo">---</span></h2>
+                <p id="mon-data" class="text-4xl font-bold text-white mt-2"></p>
+            </div>
+        </header>
+        <div id="mon-grid" class="grid grid-cols-4 gap-8 mt-12 flex-grow"></div>
+    </div>
+
+    <script>
+        let ofertasAtuais = [];
+        const TEMPO_OFERTAS = 15000; // 15 segundos
+
+        // --- GITHUB API ---
+        async function conectarGitHub() {
+            localStorage.setItem('gh_token', document.getElementById('ghToken').value);
+            localStorage.setItem('gh_repo', document.getElementById('ghRepo').value);
+            baixarDados();
+        }
+
+        async function ghFetch(path, method = 'GET', body = null) {
+            const token = localStorage.getItem('gh_token');
+            const repo = localStorage.getItem('gh_repo');
+            if(!token || !repo) return null;
+
+            const url = `https://api.github.com{repo}/contents/${path}`;
+            const headers = { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' };
+
+            if (method === 'GET') {
+                const r = await fetch(url, { headers });
+                return r.ok ? await r.json() : null;
+            } else {
+                const atual = await ghFetch(path);
+                const res = await fetch(url, {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify({
+                        message: "Atualização Painel",
+                        content: btoa(unescape(encodeURIComponent(JSON.stringify(body, null, 2)))),
+                        sha: atual ? atual.sha : null
+                    })
+                });
+                return res.ok;
+            }
+        }
+
+        async function baixarDados() {
+            const tipo = document.getElementById('filtroTipo').value;
+            const res = await ghFetch(`${tipo}.json`);
+            ofertasAtuais = res ? JSON.parse(decodeURIComponent(escape(atob(res.content)))) : [];
+            renderizarListaAdm();
+        }
+
+        // --- GESTÃO ADM ---
+        async function adicionarOferta() {
+            const tipo = document.getElementById('filtroTipo').value;
+            const nova = { nome: document.getElementById('prodNome').value, preco: document.getElementById('prodPreco').value };
+            if(!nova.nome || !nova.preco) return;
+            
+            ofertasAtuais.push(nova);
+            await ghFetch(`${tipo}.json`, 'PUT', ofertasAtuais);
+            document.getElementById('prodNome').value = "";
+            document.getElementById('prodPreco').value = "";
+            renderizarListaAdm();
+        }
+
+        async function excluir(i) {
+            const tipo = document.getElementById('filtroTipo').value;
+            ofertasAtuais.splice(i, 1);
+            await ghFetch(`${tipo}.json`, 'PUT', ofertasAtuais);
+            renderizarListaAdm();
+        }
+
+        function renderizarListaAdm() {
+            const container = document.getElementById('lista-itens');
+            container.innerHTML = ofertasAtuais.map((item, i) => `
+                <div class="bg-gray-800 p-2 rounded flex justify-between items-center text-xs">
+                    <span><b>${item.nome}</b> - R$ ${item.preco}</span>
+                    <button onclick="excluir(${i})" class="text-red-500 font-bold underline">Remover</button>
+                </div>
+            `).join('');
+        }
+
+        function atualizarPreview() {
+            document.getElementById('preview-video').src = document.getElementById('videoInput').value;
+        }
+
+        // --- MONITOR ---
+        function iniciarMonitor() {
+            document.getElementById('monitor').style.display = 'flex';
+            document.getElementById('mon-logo').src = document.getElementById('logoInput').value;
+            document.getElementById('mon-data').innerText = new Date().toLocaleDateString('pt-BR');
+            document.documentElement.requestFullscreen();
+            cicloMonitor();
+        }
+
+        function cicloMonitor() {
+            const tipo = document.getElementById('filtroTipo').value;
+            document.getElementById('mon-titulo-tipo').innerText = tipo;
+            
+            // Exibe até 8 ofertas por vez
+            document.getElementById('mon-grid').innerHTML = ofertasAtuais.slice(0, 8).map(item => `
+                <div class="bg-white p-6 rounded-3xl shadow-2xl text-center border-b-[15px] border-orange-600 fade-in">
+                    <h3 class="text-slate-900 text-4xl font-black uppercase h-24 flex items-center justify-center leading-none">${item.nome}</h3>
+                    <div class="my-6">
+                        <span class="text-orange-600 text-2xl font-bold">R$</span>
+                        <span class="preco-valor text-9xl font-black text-slate-900 tracking-tighter">${item.preco}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            setTimeout(iniciarVideo, TEMPO_OFERTAS);
+        }
+
+        function iniciarVideo() {
+            const v = document.getElementById('monitor-video');
+            const m = document.getElementById('monitor');
+            v.src = document.getElementById('videoInput').value;
+            
+            v.classList.remove('hidden');
+            m.classList.add('hidden');
+            v.play();
+
+            v.onended = () => {
+                v.classList.add('hidden');
+                m.classList.remove('hidden');
+                cicloMonitor();
+            };
+        }
+
+        window.onload = () => {
+            document.getElementById('ghToken').value = localStorage.getItem('gh_token') || "";
+            document.getElementById('ghRepo').value = localStorage.getItem('gh_repo') || "";
+            if(localStorage.getItem('gh_token')) baixarDados();
+            atualizarPreview();
+        };
+    </script>
+</body>
+</html>
