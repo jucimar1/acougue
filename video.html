@@ -6,7 +6,7 @@
     <title>Painel Açougue - Versão Estabilizada</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #0d1117; color: white; }
         .preco-valor { font-family: 'Oswald', sans-serif; }
         #monitor { background: #000; display: none; z-index: 9999; }
@@ -25,6 +25,7 @@
             <h1 class="text-2xl font-black text-orange-500 italic uppercase">Gestão de Açougue</h1>
             <div class="flex gap-2">
                 <button onclick="baixarDados()" class="bg-gray-700 px-4 py-2 rounded text-xs font-bold">ATUALIZAR LISTA</button>
+                <button onclick="sincronizarGitHub()" class="bg-green-600 px-6 py-2 rounded-full font-bold uppercase text-xs">SINCRONIZAR COM GITHUB</button>
                 <button onclick="iniciarMonitor()" class="bg-blue-600 px-6 py-2 rounded-full font-bold uppercase text-xs">INICIAR TV</button>
             </div>
         </header>
@@ -71,6 +72,7 @@
                     <div class="flex gap-2">
                         <input id="videoInput" type="text" value="churras.mp4" class="flex-grow bg-black border border-gray-700 p-2 rounded text-xs">
                         <button onclick="testarMidia('video')" class="bg-gray-700 px-2 rounded text-[10px]">VER</button>
+                        <button onclick="reproduzirVideo()" class="bg-blue-600 px-2 rounded text-[10px]">REPRODUZIR</button>
                     </div>
                 </div>
                 <video id="preview-video" class="w-full h-32 bg-black rounded-lg border border-gray-700" muted autoplay loop></video>
@@ -100,6 +102,7 @@
     <script>
         let ofertasAtuais = [];
         const TEMPO_EXIBICAO = 15000;
+        let editando = null; // Flag para indicar se estamos editando um item
 
         // SALVAMENTO SEGURO DE CONFIGURAÇÕES
         document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('gh_token', e.target.value));
@@ -115,7 +118,7 @@
                 return null;
             }
 
-            const url = `https://api.github.com{repo}/contents/${path}`;
+            const url = `https://api.github.com/repos/${repo}/contents/${path}`;
             const headers = { 
                 'Authorization': `token ${token}`,
                 'Accept': 'application/vnd.github.v3+json',
@@ -170,12 +173,23 @@
             
             if(!nova.nome || !nova.preco) return alert("Preencha todos os campos!");
             
-            ofertasAtuais.push(nova);
+            if (editando && editando.tipo === tipo) {
+                // Editando um item existente
+                ofertasAtuais[editando.index] = nova;
+                editando = null;
+                btn.innerText = "ATUALIZAR";
+            } else {
+                // Adicionando novo item
+                ofertasAtuais.push(nova);
+                btn.innerText = "SALVAR NO GITHUB";
+            }
+            
             const ok = await ghFetch(`${tipo}.json`, 'PUT', ofertasAtuais);
             if(ok) {
                 document.getElementById('prodNome').value = "";
                 document.getElementById('prodPreco').value = "";
                 renderizarListaAdm();
+                salvarLocalmente(); // Salva localmente
             }
             btn.innerText = "SALVAR NO GITHUB";
         }
@@ -188,6 +202,22 @@
             renderizarListaAdm();
         }
 
+        function editarItem(i) {
+            const item = ofertasAtuais[i];
+            document.getElementById('prodNome').value = item.nome;
+            document.getElementById('prodPreco').value = item.preco;
+            
+            // Remove o item da lista
+            ofertasAtuais.splice(i, 1);
+            renderizarListaAdm();
+            
+            // Altera o texto do botão para "Atualizar"
+            document.getElementById('btn-salvar').innerText = "ATUALIZAR";
+            
+            // Define uma flag para saber que estamos editando
+            editando = { index: i, tipo: document.getElementById('filtroTipo').value };
+        }
+
         function renderizarListaAdm() {
             const container = document.getElementById('lista-itens');
             if(ofertasAtuais.length === 0) {
@@ -197,7 +227,10 @@
             container.innerHTML = ofertasAtuais.map((item, i) => `
                 <div class="bg-gray-800 p-2 rounded flex justify-between items-center text-xs border border-gray-700">
                     <span><b>${item.nome}</b> - R$ ${item.preco}</span>
-                    <button onclick="excluir(${i})" class="text-red-500 font-bold hover:underline">REMOVER</button>
+                    <div>
+                        <button onclick="editarItem(${i})" class="text-yellow-500 font-bold hover:underline">EDITAR</button>
+                        <button onclick="excluir(${i})" class="text-red-500 font-bold hover:underline">REMOVER</button>
+                    </div>
                 </div>
             `).join('');
         }
@@ -249,13 +282,69 @@
             };
         }
 
+        function reproduzirVideo() {
+            const video = document.getElementById('preview-video');
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+        }
+
+        function salvarLocalmente() {
+            localStorage.setItem('ofertasAtuais', JSON.stringify(ofertasAtuais));
+        }
+
+        function carregarLocalmente() {
+            const dados = localStorage.getItem('ofertasAtuais');
+            if(dados) {
+                try {
+                    ofertasAtuais = JSON.parse(dados);
+                } catch(e) {
+                    console.error("Erro ao carregar dados locais:", e);
+                }
+            }
+        }
+
         window.onload = () => {
             const t = localStorage.getItem('gh_token');
             const r = localStorage.getItem('gh_repo');
             if(t) document.getElementById('ghToken').value = t;
             if(r) document.getElementById('ghRepo').value = r;
-            if(t && r) baixarDados();
+            if(t && r) {
+                baixarDados();
+            } else {
+                carregarLocalmente(); // Tenta carregar dados locais
+                renderizarListaAdm();
+            }
         };
+
+        async function sincronizarGitHub() {
+            const tipo = document.getElementById('filtroTipo').value;
+            const token = document.getElementById('ghToken').value;
+            const repo = document.getElementById('ghRepo').value;
+            
+            if (!token || !repo) {
+                alert("Preencha Token e Repositório!");
+                return;
+            }
+            
+            if (ofertasAtuais.length === 0) {
+                alert("Não há dados para sincronizar!");
+                return;
+            }
+            
+            try {
+                const resposta = await ghFetch(`${tipo}.json`, 'PUT', ofertasAtuais);
+                if (resposta) {
+                    alert("Dados sincronizados com sucesso!");
+                    renderizarListaAdm();
+                }
+            } catch (error) {
+                console.error("Erro ao sincronizar:", error);
+                alert("Erro ao sincronizar com o GitHub.");
+            }
+        }
     </script>
 </body>
 </html>
