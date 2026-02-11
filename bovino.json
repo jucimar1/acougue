@@ -2,5 +2,9 @@
   {
     "nome": "costela kg",
     "preco": "19,99"
+  },
+  {
+    "nome": "costela dianteira",
+    "preco": "19,99"
   }
 ]
