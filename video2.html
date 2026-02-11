@@ -14,7 +14,7 @@
         .log-success { color: #44ff44; font-size: 10px; margin-top: 5px; }
         /* Estilo para o fundo */
         #monitor {
-            background-image: url('images/fundo.jpg'); /* Substitua pelo caminho da sua imagem */
+            background-image: url('images/fundo.jpg'); 
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -159,7 +159,7 @@
                         <input id="videoInput" type="text" value="churras.mp4" class="flex-grow bg-black border border-gray-700 p-2 rounded text-xs">
                         <button onclick="abrirSelecaoArquivo()" class="bg-gray-700 px-2 rounded text-[10px]">PROCURAR</button>
                         <button onclick="salvarVideoNoGitHub()" class="bg-green-600 px-2 rounded text-[10px]">SALVAR NO GITHUB</button>
-                        <button onclick="testarMidia('video')" class="bg-gray-700 px-2 rounded text-[10px]">VER</button>
+                        <button onclick="verVideosNoGitHub()" class="bg-blue-600 px-2 rounded text-[10px]">VER VÍDEOS</button>
                         <button onclick="reproduzirVideoNoMonitor()" class="bg-blue-600 px-2 rounded text-[10px]">REPRODUZIR</button>
                     </div>
                 </div>
@@ -202,8 +202,8 @@
         let ofertasAtuais = [];
         const TEMPO_EXIBICAO = 15000;
         let editando = null;
-        let indiceAtual = 0; // Índice atual dos cortes
-        let totalCortes = 0; // Total de cortes
+        let indiceAtual = 0;
+        let totalCortes = 0;
 
         // SALVAMENTO SEGURO DE CONFIGURAÇÕES
         document.getElementById('ghToken').addEventListener('input', (e) => localStorage.setItem('gh_token', e.target.value));
@@ -573,6 +573,46 @@
             input.click();
         }
 
+        function verVideosNoGitHub() {
+            const token = document.getElementById('ghToken').value;
+            const repo = document.getElementById('ghRepo').value;
+
+            if (!token || !repo) {
+                alert("Preencha Token e Repositório!");
+                return;
+            }
+
+            const url = `https://api.github.com/repos/${repo}/contents/`;
+            fetch(url, {
+                headers: { 'Authorization': `token ${token}` }
+            })
+            .then(response => response.json())
+            .then(files => {
+                const videos = files.filter(file => file.type === "file" && /\.(mp4|webm|ogg)$/i.test(file.name));
+                if (videos.length === 0) {
+                    alert("Nenhum vídeo encontrado no repositório.");
+                    return;
+                }
+
+                let listagem = "<ul>";
+                videos.forEach(video => {
+                    listagem += `<li><button onclick="selecionarVideo('${video.name}')">${video.name}</button></li>`;
+                });
+                listagem += "</ul>";
+
+                document.getElementById('lista-videos').innerHTML = listagem;
+            })
+            .catch(error => {
+                console.error("Erro ao listar vídeos:", error);
+                alert("Erro ao carregar a lista de vídeos.");
+            });
+        }
+
+        function selecionarVideo(nome) {
+            document.getElementById('videoInput').value = nome;
+            alert(`Vídeo "${nome}" selecionado.`);
+        }
+
         function iniciarMonitor() {
             if(ofertasAtuais.length === 0) return alert("Adicione preços antes de iniciar!");
             document.getElementById('monitor').style.display = 'flex';
@@ -622,6 +662,63 @@
             setTimeout(cicloMonitor, TEMPO_EXIBICAO);
         }
 
+        async function iniciarVideo() {
+            const v = document.getElementById('monitor-video');
+            const m = document.getElementById('monitor');
+
+            const videoPath = document.getElementById('videoInput').value;
+            if (!videoPath || !videoPath.trim()) {
+                alert("Por favor, insira um caminho válido para o vídeo.");
+                return;
+            }
+
+            // Busca o link direto do vídeo no GitHub
+            try {
+                const token = document.getElementById('ghToken').value;
+                const repo = document.getElementById('ghRepo').value;
+
+                if (!token || !repo) {
+                    alert("Preencha Token e Repositório!");
+                    return;
+                }
+
+                const url = `https://api.github.com/repos/${repo}/contents/${videoPath}`;
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+
+                if (!response.ok) {
+                    throw new Error("Arquivo não encontrado no GitHub.");
+                }
+
+                const data = await response.json();
+                const videoUrl = data.download_url; // Link direto para download
+
+                v.src = videoUrl;
+                v.classList.remove('hidden');
+                m.classList.add('hidden');
+
+                v.onerror = () => {
+                    console.error("Erro ao carregar o vídeo:", v.src);
+                    alert("Erro ao carregar o vídeo. Verifique o caminho e o formato.");
+                };
+
+                v.play().catch((error) => {
+                    console.error("Erro ao reproduzir o vídeo:", error);
+                    alert("Não foi possível reproduzir o vídeo. Verifique se o formato é suportado.");
+                });
+
+                v.onended = () => {
+                    v.classList.add('hidden');
+                    m.classList.remove('hidden');
+                    cicloMonitor();
+                };
+            } catch (error) {
+                console.error("Erro ao buscar o vídeo:", error);
+                alert("Erro ao carregar o vídeo. Verifique o caminho e o formato.");
+            }
+        }
+
         function mostrarVideo() {
             const v = document.getElementById('monitor-video');
             const m = document.getElementById('monitor');
@@ -632,27 +729,53 @@
                 return;
             }
 
-            v.src = videoPath;
-            v.classList.remove('hidden');
-            m.classList.add('hidden');
+            // Busca o link direto do vídeo no GitHub
+            try {
+                const token = document.getElementById('ghToken').value;
+                const repo = document.getElementById('ghRepo').value;
 
-            v.onerror = () => {
-                console.error("Erro ao carregar o vídeo:", v.src);
+                if (!token || !repo) {
+                    alert("Preencha Token e Repositório!");
+                    return;
+                }
+
+                const url = `https://api.github.com/repos/${repo}/contents/${videoPath}`;
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+
+                if (!response.ok) {
+                    throw new Error("Arquivo não encontrado no GitHub.");
+                }
+
+                const data = await response.json();
+                const videoUrl = data.download_url; // Link direto para download
+
+                v.src = videoUrl;
+                v.classList.remove('hidden');
+                m.classList.add('hidden');
+
+                v.onerror = () => {
+                    console.error("Erro ao carregar o vídeo:", v.src);
+                    alert("Erro ao carregar o vídeo. Verifique o caminho e o formato.");
+                };
+
+                v.play().catch((error) => {
+                    console.error("Erro ao reproduzir o vídeo:", error);
+                    alert("Não foi possível reproduzir o vídeo. Verifique se o formato é suportado.");
+                });
+
+                v.onended = () => {
+                    v.classList.add('hidden');
+                    m.classList.remove('hidden');
+                    // Reinicia o ciclo de cortes
+                    indiceAtual = 0;
+                    cicloMonitor();
+                };
+            } catch (error) {
+                console.error("Erro ao buscar o vídeo:", error);
                 alert("Erro ao carregar o vídeo. Verifique o caminho e o formato.");
-            };
-
-            v.play().catch((error) => {
-                console.error("Erro ao reproduzir o vídeo:", error);
-                alert("Não foi possível reproduzir o vídeo. Verifique se o formato é suportado.");
-            });
-
-            v.onended = () => {
-                v.classList.add('hidden');
-                m.classList.remove('hidden');
-                // Reinicia o ciclo de cortes
-                indiceAtual = 0;
-                cicloMonitor();
-            };
+            }
         }
 
         function reproduzirVideoNoMonitor() {
